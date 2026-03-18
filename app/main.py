@@ -1,38 +1,72 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-pseudo_db=[
-    {"id":1, "name":"Sport", "description":"GO  to gym"},
-    {"id":2, "name":"Study", "description":"Read a book"},
-    {"id":3, "name":"Sleep", "description":"Go to bed early"}
-]
+from app.models import Todo
+from app.storage import get_db
 
 
-app=FastAPI()
+app = FastAPI()
+
+
+# --- Schemas ---
+
+class TodoCreate(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class TodoUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class TodoResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None
+
+    model_config = {"from_attributes": True}
+
+
+# --- Endpoints ---
 
 @app.get("/")
 def index():
-    return {"message":"Hello world"}
+    return {"message": "Hello world"}
 
-@app.get("/todos")
-def get_todos():
-    return pseudo_db
 
-@app.get("/todos/{id}")
-def get_todo(id:int):
-    for todo in pseudo_db:
-        if todo["id"]==id:
-            return todo
-    return {"message":"Todo not found"}
+@app.get("/todos", response_model=list[TodoResponse])
+def get_todos(db: Session = Depends(get_db)):
+    return db.query(Todo).all()
 
-@app.post("/todos")
-def create_todo(todo:dict):
-    pseudo_db.append(todo)
-    return {"message":"Todo created successfully"}  
 
-@app.put("/todos/{id}")
-def update_todo(id:int, todo:dict):
-    for index, item in enumerate(pseudo_db):
-        if item["id"]==id:
-            pseudo_db[index]=todo
-            return {"message":"Todo updated successfully"}
-    return {"message":"Todo not found"}
+@app.get("/todos/{id}", response_model=TodoResponse)
+def get_todo(id: int, db: Session = Depends(get_db)):
+    todo = db.query(Todo).filter(Todo.id == id).first()
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    return todo
+
+
+@app.post("/todos", response_model=TodoResponse, status_code=201)
+def create_todo(todo: TodoCreate, db: Session = Depends(get_db)):
+    db_todo = Todo(name=todo.name, description=todo.description)
+    db.add(db_todo)
+    db.commit()
+    db.refresh(db_todo)
+    return db_todo
+
+
+@app.put("/todos/{id}", response_model=TodoResponse)
+def update_todo(id: int, todo: TodoUpdate, db: Session = Depends(get_db)):
+    db_todo = db.query(Todo).filter(Todo.id == id).first()
+    if not db_todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    if todo.name is not None:
+        db_todo.name = todo.name
+    if todo.description is not None:
+        db_todo.description = todo.description
+    db.commit()
+    db.refresh(db_todo)
+    return db_todo
