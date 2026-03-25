@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todo App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container { width: 100%; max-width: 480px; }
+
+    h1 { margin-bottom: 24px; font-size: 1.6rem; }
+    h2 { margin-bottom: 16px; font-size: 1.2rem; }
+
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+
+    input {
+      width: 100%;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-danger  { background: #ef4444; color: white; }
+    .btn-secondary { background: #e5e7eb; color: #111; }
+
+    .btn-primary:hover  { background: #2563eb; }
+    .btn-danger:hover   { background: #dc2626; }
+    .btn-secondary:hover { background: #d1d5db; }
+
+    .row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .row input { margin-bottom: 0; }
+
+    .tab-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab { flex: 1; }
+
+    .todo-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .todo-item:last-child { border-bottom: none; }
+
+    .todo-name { font-weight: 600; }
+    .todo-desc { font-size: 0.85rem; color: #666; }
+
+    .todo-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    .error { color: #ef4444; font-size: 0.85rem; margin-top: 6px; }
+    .success { color: #22c55e; font-size: 0.85rem; margin-top: 6px; }
+
+    .hidden { display: none; }
+
+    #logout-btn { float: right; margin-top: -4px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Auth view -->
+  <div id="auth-view">
+    <h1>Todo App</h1>
+    <div class="card">
+      <div class="tab-row">
+        <button class="btn-primary tab" id="tab-login" onclick="showTab('login')">Login</button>
+        <button class="btn-secondary tab" id="tab-register" onclick="showTab('register')">Register</button>
+      </div>
+
+      <div id="login-form">
+        <input type="text" id="login-username" placeholder="Username" />
+        <input type="password" id="login-password" placeholder="Password" />
+        <button class="btn-primary" onclick="login()">Login</button>
+        <div id="login-msg"></div>
+      </div>
+
+      <div id="register-form" class="hidden">
+        <input type="text" id="reg-username" placeholder="Username" />
+        <input type="password" id="reg-password" placeholder="Password" />
+        <button class="btn-primary" onclick="register()">Register</button>
+        <div id="register-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Todo view -->
+  <div id="todo-view" class="hidden">
+    <h1>My Todos <button class="btn-secondary" id="logout-btn" onclick="logout()">Logout</button></h1>
+
+    <!-- Add todo -->
+    <div class="card">
+      <h2>Add Todo</h2>
+      <input type="text" id="new-name" placeholder="Name" />
+      <input type="text" id="new-desc" placeholder="Description (optional)" />
+      <button class="btn-primary" onclick="createTodo()">Add</button>
+      <div id="add-msg"></div>
+    </div>
+
+    <!-- Todo list -->
+    <div class="card">
+      <h2>Todos</h2>
+      <div id="todo-list"><p style="color:#999">Loading...</p></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const API = 'http://localhost:8000';
+
+  function getToken() { return localStorage.getItem('token'); }
+  function setToken(t) { localStorage.setItem('token', t); }
+  function clearToken() { localStorage.removeItem('token'); }
+
+  function authHeaders() {
+    return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
+  }
+
+  function showMsg(id, text, isError = true) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = isError ? 'error' : 'success';
+  }
+
+  function showTab(tab) {
+    document.getElementById('login-form').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('register-form').classList.toggle('hidden', tab !== 'register');
+    document.getElementById('tab-login').className = tab === 'login' ? 'btn-primary tab' : 'btn-secondary tab';
+    document.getElementById('tab-register').className = tab === 'register' ? 'btn-primary tab' : 'btn-secondary tab';
+  }
+
+  function showView(view) {
+    document.getElementById('auth-view').classList.toggle('hidden', view !== 'auth');
+    document.getElementById('todo-view').classList.toggle('hidden', view !== 'todo');
+  }
+
+  // --- Auth ---
+
+  async function login() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setToken(data.access_token);
+      showView('todo');
+      loadTodos();
+    } else {
+      showMsg('login-msg', 'Invalid username or password');
+    }
+  }
+
+  async function register() {
+    const username = document.getElementById('reg-username').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const res = await fetch(`${API}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (res.ok) {
+      showMsg('register-msg', 'Account created! You can now login.', false);
+      showTab('login');
+    } else {
+      const data = await res.json();
+      showMsg('register-msg', data.detail || 'Registration failed');
+    }
+  }
+
+  function logout() {
+    clearToken();
+    showView('auth');
+  }
+
+  // --- Todos ---
+
+  async function loadTodos() {
+    const res = await fetch(`${API}/todos`, { headers: authHeaders() });
+    if (res.status === 401) { logout(); return; }
+    const todos = await res.json();
+    renderTodos(todos);
+  }
+
+  function renderTodos(todos) {
+    const list = document.getElementById('todo-list');
+    if (todos.length === 0) {
+      list.innerHTML = '<p style="color:#999">No todos yet.</p>';
+      return;
+    }
+    list.innerHTML = todos.map(t => `
+      <div class="todo-item" id="todo-${t.id}">
+        <div>
+          <div class="todo-name">${escapeHtml(t.name)}</div>
+          ${t.description ? `<div class="todo-desc">${escapeHtml(t.description)}</div>` : ''}
+        </div>
+        <div class="todo-actions">
+          <button class="btn-secondary" onclick="startEdit(${t.id}, '${escapeAttr(t.name)}', '${escapeAttr(t.description || '')}')">Edit</button>
+          <button class="btn-danger" onclick="deleteTodo(${t.id})">Delete</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function createTodo() {
+    const name = document.getElementById('new-name').value.trim();
+    const description = document.getElementById('new-desc').value.trim();
+    if (!name) { showMsg('add-msg', 'Name is required'); return; }
+    const res = await fetch(`${API}/todos`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ name, description: description || null })
+    });
+    if (res.ok) {
+      document.getElementById('new-name').value = '';
+      document.getElementById('new-desc').value = '';
+      document.getElementById('add-msg').textContent = '';
+      loadTodos();
+    } else {
+      showMsg('add-msg', 'Failed to create todo');
+    }
+  }
+
+  async function deleteTodo(id) {
+    await fetch(`${API}/todos/${id}`, { method: 'DELETE', headers: authHeaders() });
+    loadTodos();
+  }
+
+  function startEdit(id, name, description) {
+    const item = document.getElementById(`todo-${id}`);
+    item.innerHTML = `
+      <div style="flex:1">
+        <input type="text" id="edit-name-${id}" value="${escapeAttr(name)}" style="margin-bottom:6px" />
+        <input type="text" id="edit-desc-${id}" value="${escapeAttr(description)}" />
+      </div>
+      <div class="todo-actions">
+        <button class="btn-primary" onclick="saveEdit(${id})">Save</button>
+        <button class="btn-secondary" onclick="loadTodos()">Cancel</button>
+      </div>
+    `;
+  }
+
+  async function saveEdit(id) {
+    const name = document.getElementById(`edit-name-${id}`).value.trim();
+    const description = document.getElementById(`edit-desc-${id}`).value.trim();
+    if (!name) return;
+    await fetch(`${API}/todos/${id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ name, description: description || null })
+    });
+    loadTodos();
+  }
+
+  // --- Helpers ---
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function escapeAttr(str) {
+    return String(str).replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+  }
+
+  // --- Init ---
+  if (getToken()) {
+    showView('todo');
+    loadTodos();
+  } else {
+    showView('auth');
+  }
+</script>
+</body>
+</html>
