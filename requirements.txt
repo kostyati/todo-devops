@@ -44,6 +44,9 @@ uvicorn==0.41.0
 sqlalchemy==2.0.41
 alembic==1.16.1
 psycopg2-binary==2.9.10
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+python-jose[cryptography]==3.3.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
